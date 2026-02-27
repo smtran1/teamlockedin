@@ -120,7 +120,7 @@ function ApplicationCard({ app, onOpenDetails, onDelete }) {
   );
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onLogout }) {
   const [applications, setApplications] = useState(SEED_APPLICATIONS);
   const [reminders, setReminders] = useState(SEED_REMINDERS);
 
@@ -282,7 +282,7 @@ export default function Dashboard() {
               </svg>
             </button>
 
-            <button className="danger-btn danger-btn--logout" type="button" disabled>
+            <button className="danger-btn danger-btn--logout" type="button" onClick={onLogout}>
               Log Out
             </button>
           </div>

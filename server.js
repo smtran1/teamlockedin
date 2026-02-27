@@ -3,6 +3,8 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const port = 3000;
@@ -10,24 +12,11 @@ const port = 3000;
 // Middleware to parse JSON bodies
 app.use(express.json());
 
-// Serve static files from the "public" folder
-app.use(express.static('public'));
+const reactDistPath = path.join(__dirname, 'frontend', 'dist');
+const legacyPublicPath = path.join(__dirname, 'public');
+const servingReactBuild = fs.existsSync(reactDistPath);
 
-//////////////////////////////////////
-//ROUTES TO SERVE HTML FILES
-//////////////////////////////////////
-// Default route to serve logon.html
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/logon.html');
-});
-
-// Route to serve dashboard.html
-app.get('/dashboard', (req, res) => {
-    res.sendFile(__dirname + '/public/dashboard.html');
-});
-//////////////////////////////////////
-//END ROUTES TO SERVE HTML FILES
-//////////////////////////////////////
+app.use(express.static(servingReactBuild ? reactDistPath : legacyPublicPath));
 
 
 /////////////////////////////////////////////////
@@ -45,7 +34,10 @@ async function createConnection() {
 
 // **Authorization Middleware: Verify JWT Token and Check User in Database**
 async function authenticateToken(req, res, next) {
-    const token = req.headers['authorization'];
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : authHeader;
 
     if (!token) {
         return res.status(401).json({ message: 'Access denied. No token provided.' });
@@ -58,11 +50,12 @@ async function authenticateToken(req, res, next) {
 
         try {
             const connection = await createConnection();
+            const normalizedEmail = String(decoded.email || '').trim().toLowerCase();
 
             // Query the database to verify that the email is associated with an active account
             const [rows] = await connection.execute(
-                'SELECT email FROM user WHERE email = ?',
-                [decoded.email]
+                'SELECT email FROM user WHERE LOWER(email) = ?',
+                [normalizedEmail]
             );
 
             await connection.end();  // Close connection
@@ -90,8 +83,9 @@ async function authenticateToken(req, res, next) {
 // Route: Create Account
 app.post('/api/create-account', async (req, res) => {
     const { email, password } = req.body;
+    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
         return res.status(400).json({ message: 'Email and password are required.' });
     }
 
@@ -101,7 +95,7 @@ app.post('/api/create-account', async (req, res) => {
 
         const [result] = await connection.execute(
             'INSERT INTO user (email, password) VALUES (?, ?)',
-            [email, hashedPassword]
+            [normalizedEmail, hashedPassword]
         );
 
         await connection.end();  // Close connection
@@ -120,39 +114,63 @@ app.post('/api/create-account', async (req, res) => {
 // Route: Logon
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
+    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
         return res.status(400).json({ message: 'Email and password are required.' });
     }
 
     try {
         const connection = await createConnection();
+        try {
+            const [rows] = await connection.execute(
+                'SELECT * FROM user WHERE LOWER(email) = ?',
+                [normalizedEmail]
+            );
 
-        const [rows] = await connection.execute(
-            'SELECT * FROM user WHERE email = ?',
-            [email]
-        );
+            if (rows.length === 0) {
+                return res.status(401).json({ message: 'Invalid email or password.' });
+            }
 
-        await connection.end();  // Close connection
+            const user = rows[0];
+            const storedPassword = String(user.password || '');
+            const looksHashed = storedPassword.startsWith('$2a$')
+                || storedPassword.startsWith('$2b$')
+                || storedPassword.startsWith('$2y$');
 
-        if (rows.length === 0) {
-            return res.status(401).json({ message: 'Invalid email or password.' });
+            let isPasswordValid = false;
+            let shouldRehash = false;
+
+            if (looksHashed) {
+                isPasswordValid = await bcrypt.compare(password, storedPassword);
+            } else {
+                // Backward compatibility for legacy plaintext passwords.
+                isPasswordValid = password === storedPassword;
+                shouldRehash = isPasswordValid;
+            }
+
+            if (!isPasswordValid) {
+                return res.status(401).json({ message: 'Invalid email or password.' });
+            }
+
+            if (shouldRehash) {
+                const hashedPassword = await bcrypt.hash(password, 10);
+                await connection.execute(
+                    'UPDATE user SET password = ? WHERE email = ?',
+                    [hashedPassword, user.email]
+                );
+            }
+
+            const token = jwt.sign(
+                { email: user.email },
+                process.env.JWT_SECRET,
+                { expiresIn: '1h' }
+            );
+
+            res.status(200).json({ token });
+        } finally {
+            await connection.end();  // Close connection
         }
-
-        const user = rows[0];
-
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Invalid email or password.' });
-        }
-
-        const token = jwt.sign(
-            { email: user.email },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
-
-        res.status(200).json({ token });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error logging in.' });
@@ -175,9 +193,21 @@ app.get('/api/users', authenticateToken, async (req, res) => {
         res.status(500).json({ message: 'Error retrieving email addresses.' });
     }
 });
+
+// Route: Verify current user token
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+    res.status(200).json({ email: req.user.email });
+});
 //////////////////////////////////////
 //END ROUTES TO HANDLE API REQUESTS
 //////////////////////////////////////
+
+if (servingReactBuild) {
+    // SPA fallback: return React app for all non-API routes.
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(reactDistPath, 'index.html'));
+    });
+}
 
 
 // Start the server
