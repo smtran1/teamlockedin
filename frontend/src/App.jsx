@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import Applications from "./pages/applications";
+import Reminders from "./pages/reminders";
 
 export default function App() {
   const [authStatus, setAuthStatus] = useState("loading");
@@ -60,6 +61,10 @@ export default function App() {
 
   if (currentPage === "applications") {
     return <Applications onLogout={handleLogout} onNavigate={setCurrentPage} />;
+  }
+
+  if (currentPage === "reminders") {
+    return <Reminders onLogout={handleLogout} onNavigate={setCurrentPage} />;
   }
 
   return <Dashboard onLogout={handleLogout} onNavigate={setCurrentPage} />;

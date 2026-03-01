@@ -213,7 +213,7 @@ export default function Dashboard({ onLogout, onNavigate }) {
             <button className="nav-link" type="button" onClick={() => onNavigate?.("applications")}>
               Applications
             </button>
-            <button className="nav-link" type="button" disabled>
+            <button className="nav-link" type="button" onClick={() => onNavigate?.("reminders")}>
               Reminders
             </button>
             <button className="nav-link" type="button" disabled>
