@@ -80,7 +80,7 @@ function StatusPill({ status }) {
   return <span className={className}>{status}</span>;
 }
 
-function ApplicationCard({ app, onOpenDetails, onDelete }) {
+function ApplicationCard({ app, onOpenDetails, onDelete, onEdit }) {
   return (
     <article
       className="app-card"
@@ -110,7 +110,7 @@ function ApplicationCard({ app, onOpenDetails, onDelete }) {
         <button className="ghost-btn" type="button" onClick={() => onOpenDetails(app)}>
           View
         </button>
-        <button className="ghost-btn" type="button" disabled>
+        <button className="ghost-btn" type="button" onClick={onEdit}>
           Edit
         </button>
         <button className="danger-btn" type="button" onClick={() => onDelete(app.id)}>
@@ -162,18 +162,7 @@ export default function Dashboard({ onLogout, onNavigate }) {
   }, [applications, query, statusFilter, sortBy]);
 
   function handleAddApplication() {
-    const nextId = Math.max(0, ...applications.map((a) => a.id)) + 1;
-    const newApp = {
-      id: nextId,
-      title: "New Application",
-      company: "Company",
-      location: "Location",
-      status: "Saved",
-      next: "Set next step",
-      docs: 0,
-      contacts: 0,
-    };
-    setApplications((prev) => [newApp, ...prev]);
+    onNavigate?.("applications");
   }
 
   function handleOpenDetails(app) {
@@ -400,6 +389,7 @@ export default function Dashboard({ onLogout, onNavigate }) {
                     app={app}
                     onOpenDetails={handleOpenDetails}
                     onDelete={handleDelete}
+                    onEdit={() => onNavigate?.("applications")}
                   />
                 ))}
               </div>
