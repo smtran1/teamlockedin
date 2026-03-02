@@ -4,6 +4,7 @@ import Dashboard from "./pages/dashboard";
 import Applications from "./pages/applications";
 import Reminders from "./pages/reminders";
 import Contacts from "./pages/contacts";
+import Documents from "./pages/documents";
 
 export default function App() {
   const [authStatus, setAuthStatus] = useState("loading");
@@ -70,6 +71,10 @@ export default function App() {
 
   if (currentPage === "contacts") {
     return <Contacts onLogout={handleLogout} onNavigate={setCurrentPage} />;
+  }
+
+  if (currentPage === "documents") {
+    return <Documents onLogout={handleLogout} onNavigate={setCurrentPage} />;
   }
 
   return <Dashboard onLogout={handleLogout} onNavigate={setCurrentPage} />;
