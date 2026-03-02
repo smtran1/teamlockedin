@@ -160,7 +160,7 @@ export default function Applications({ onLogout, onNavigate }) {
             <button className="nav-link" type="button" onClick={() => onNavigate?.("reminders")}>
               Reminders
             </button>
-            <button className="nav-link" type="button" disabled>
+            <button className="nav-link" type="button" onClick={() => onNavigate?.("contacts")}>
               Contacts
             </button>
             <button className="nav-link" type="button" disabled>
