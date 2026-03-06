@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import lockedInLogo from "../assets/lockedindark.png";
 
 const SEED_APPLICATIONS = [
   {
@@ -79,7 +80,7 @@ function StatusPill({ status }) {
   return <span className={className}>{status}</span>;
 }
 
-function ApplicationCard({ app, onOpenDetails, onDelete }) {
+function ApplicationCard({ app, onOpenDetails, onDelete, onEdit }) {
   return (
     <article
       className="app-card"
@@ -109,7 +110,7 @@ function ApplicationCard({ app, onOpenDetails, onDelete }) {
         <button className="ghost-btn" type="button" onClick={() => onOpenDetails(app)}>
           View
         </button>
-        <button className="ghost-btn" type="button" disabled>
+        <button className="ghost-btn" type="button" onClick={onEdit}>
           Edit
         </button>
         <button className="danger-btn" type="button" onClick={() => onDelete(app.id)}>
@@ -120,7 +121,7 @@ function ApplicationCard({ app, onOpenDetails, onDelete }) {
   );
 }
 
-export default function Dashboard({ onLogout }) {
+export default function Dashboard({ onLogout, onNavigate }) {
   const [applications, setApplications] = useState(SEED_APPLICATIONS);
   const [reminders, setReminders] = useState(SEED_REMINDERS);
 
@@ -161,18 +162,7 @@ export default function Dashboard({ onLogout }) {
   }, [applications, query, statusFilter, sortBy]);
 
   function handleAddApplication() {
-    const nextId = Math.max(0, ...applications.map((a) => a.id)) + 1;
-    const newApp = {
-      id: nextId,
-      title: "New Application",
-      company: "Company",
-      location: "Location",
-      status: "Saved",
-      next: "Set next step",
-      docs: 0,
-      contacts: 0,
-    };
-    setApplications((prev) => [newApp, ...prev]);
+    onNavigate?.("applications");
   }
 
   function handleOpenDetails(app) {
@@ -202,26 +192,25 @@ export default function Dashboard({ onLogout }) {
       <header className="top-nav">
         <div className="top-nav-inner">
           <div className="brand">
-            <span className="brand-dot" aria-hidden="true" />
-            <span className="brand-name">LockedIn Tracker</span>
+            <img className="brand-logo" src={lockedInLogo} alt="LockedIn" />
           </div>
 
           <nav className="nav-links" aria-label="Primary">
-            <a className="nav-link is-active" href="#">
+            <button className="nav-link is-active" type="button" onClick={() => onNavigate?.("dashboard")}>
               Dashboard
-            </a>
-            <a className="nav-link" href="#">
+            </button>
+            <button className="nav-link" type="button" onClick={() => onNavigate?.("applications")}>
               Applications
-            </a>
-            <a className="nav-link" href="#">
+            </button>
+            <button className="nav-link" type="button" onClick={() => onNavigate?.("reminders")}>
               Reminders
-            </a>
-            <a className="nav-link" href="#">
+            </button>
+            <button className="nav-link" type="button" onClick={() => onNavigate?.("contacts")}>
               Contacts
-            </a>
-            <a className="nav-link" href="#">
+            </button>
+            <button className="nav-link" type="button" onClick={() => onNavigate?.("documents")}>
               Documents
-            </a>
+            </button>
           </nav>
 
           <div className="nav-actions" aria-label="Utilities">
@@ -400,6 +389,7 @@ export default function Dashboard({ onLogout }) {
                     app={app}
                     onOpenDetails={handleOpenDetails}
                     onDelete={handleDelete}
+                    onEdit={() => onNavigate?.("applications")}
                   />
                 ))}
               </div>

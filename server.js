@@ -19,6 +19,14 @@ const servingReactBuild = fs.existsSync(reactDistPath);
 app.use(express.static(servingReactBuild ? reactDistPath : legacyPublicPath));
 
 
+app.get('/', (req, res) => {
+  res.redirect('/logon.html');
+});
+
+app.get('/dashboard', (req, res) => {
+  res.redirect('/dashboard.html');
+});
+
 /////////////////////////////////////////////////
 //HELPER FUNCTIONS AND AUTHENTICATION MIDDLEWARE
 /////////////////////////////////////////////////
@@ -30,6 +38,10 @@ async function createConnection() {
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
     });
+}
+
+function isPasswordComplex(password) {
+    return typeof password == 'string' && /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password);
 }
 
 // **Authorization Middleware: Verify JWT Token and Check User in Database**
@@ -87,6 +99,12 @@ app.post('/api/create-account', async (req, res) => {
 
     if (!normalizedEmail || !password) {
         return res.status(400).json({ message: 'Email and password are required.' });
+    }
+
+    if (!isPasswordComplex(password)) {
+        return res.status(400).json({
+            message: 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.'
+        });
     }
 
     try {

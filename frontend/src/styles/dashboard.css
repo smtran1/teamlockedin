@@ -112,9 +112,22 @@ a { color: inherit; }
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 750;
-  letter-spacing: 0.2px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.08);
+}
+
+.brand-logo {
+  width: 230px;
+  height: 64px;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 8px;
+  opacity: 1;
+  filter: none;
 }
 
 .brand-name {
@@ -141,18 +154,28 @@ a { color: inherit; }
 }
 
 .nav-link {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
   text-decoration: none;
   font-size: 13px;
   color: var(--muted);
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid transparent;
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
   transition: transform 140ms ease, background 140ms ease, color 140ms ease, border-color 140ms ease;
 }
 
 .nav-link:hover {
   background: rgba(148, 163, 184, 0.08);
   color: var(--text);
+}
+
+.nav-link:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .nav-link.is-active {
@@ -594,5 +617,7 @@ a { color: inherit; }
   .quick-actions, .session-actions { justify-content: flex-start; }
   .cards { grid-template-columns: 1fr; }
   .top-nav-inner { padding: 12px 14px; }
+  .brand { padding: 6px 9px; }
+  .brand-logo { width: 170px; height: 48px; }
   .dashboard { padding: 18px 14px 34px; }
 }

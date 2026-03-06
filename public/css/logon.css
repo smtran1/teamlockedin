@@ -79,10 +79,48 @@ input {
     font-size: 14px;
 }
 
+.helper {
+    margin: 6px 0 12px;
+    font-size: 12px;
+    color: #555;
+}
+
 .success {
     color: green;
 }
 
 .error {
     color: red;
+}
+
+.helper {
+  margin: 6px 0 12px;
+  font-size: 12px;
+  color: #555;
+}
+
+.inline-links {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.inline-links a {
+  color: #2a66d9;
+  text-decoration: none;
+}
+
+.inline-links a:hover {
+  text-decoration: underline;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0 6px;
+}
+
+.checkbox-row input {
+  width: auto;
+  margin: 0;
 }

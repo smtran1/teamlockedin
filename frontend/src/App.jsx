@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
+import Applications from "./pages/applications";
+import Reminders from "./pages/reminders";
+import Contacts from "./pages/contacts";
+import Documents from "./pages/documents";
 
 export default function App() {
   const [authStatus, setAuthStatus] = useState("loading");
+  const [currentPage, setCurrentPage] = useState("dashboard");
   // loading | authenticated | unauthenticated
 
   useEffect(() => {
@@ -42,19 +47,35 @@ export default function App() {
     return (
       <Login
         onLoginSuccess={() => {
+          setCurrentPage("dashboard");
           setAuthStatus("authenticated");
         }}
       />
     );
   }
 
-  return (
-    <Dashboard
-      onLogout={() => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("userEmail");
-        setAuthStatus("unauthenticated");
-      }}
-    />
-  );
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userEmail");
+    setCurrentPage("dashboard");
+    setAuthStatus("unauthenticated");
+  };
+
+  if (currentPage === "applications") {
+    return <Applications onLogout={handleLogout} onNavigate={setCurrentPage} />;
+  }
+
+  if (currentPage === "reminders") {
+    return <Reminders onLogout={handleLogout} onNavigate={setCurrentPage} />;
+  }
+
+  if (currentPage === "contacts") {
+    return <Contacts onLogout={handleLogout} onNavigate={setCurrentPage} />;
+  }
+
+  if (currentPage === "documents") {
+    return <Documents onLogout={handleLogout} onNavigate={setCurrentPage} />;
+  }
+
+  return <Dashboard onLogout={handleLogout} onNavigate={setCurrentPage} />;
 }

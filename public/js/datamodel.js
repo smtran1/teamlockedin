@@ -49,6 +49,12 @@ const DataModel = (function () {
                     },
                 });
 
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem('jwtToken');
+                    window.location.href = '/logon.html';
+                    return [];
+                }
+
                 if (!response.ok) {
                     console.error("Error fetching users:", await response.json());
                     return [];

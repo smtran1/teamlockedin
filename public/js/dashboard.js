@@ -24,8 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     //////////////////////////////////////////
     // Log out and redirect to login
     logoutButton.addEventListener('click', () => {
-        localStorage.removeItem('token');
-        window.location.href = '/';
+        localStorage.removeItem('jwtToken');
+        window.location.href = '/logon.html';
     });
 
     // Refresh list when the button is clicked
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial check for the token
     const token = localStorage.getItem('jwtToken');
     if (!token) {
-        window.location.href = '/';
+        window.location.href = '/logon.html';
     } else {
         DataModel.setToken(token);
         renderUserList();
@@ -61,7 +61,16 @@ document.addEventListener('DOMContentLoaded', () => {
 async function renderUserList() {
     const userListElement = document.getElementById('userList');
     userListElement.innerHTML = '<div class="loading-message">Loading user list...</div>';
-    const users = await DataModel.getUsers(); 
+
+    const users = await DataModel.getUsers();
+
+    userListElement.innerHTML = '';
+
+    if (!users || users.length === 0) {
+        userListElement.innerHTML = '<div class="loading-message">No users to display.</div>';
+        return;
+    }
+
     users.forEach(user => {
         const userItem = document.createElement('div');
         userItem.classList.add('user-item');
