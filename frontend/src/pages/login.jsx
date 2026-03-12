@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 export default function Login({ onLoginSuccess }) {
   const [mode, setMode] = useState("signin");
@@ -7,18 +7,6 @@ export default function Login({ onLoginSuccess }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
-
-  const canSubmit = useMemo(() => {
-    if (mode === "create") {
-      return (
-        email.trim().length > 0
-        && password.trim().length > 0
-        && confirmPassword.trim().length > 0
-      );
-    }
-
-    return email.trim().length > 0 && password.trim().length > 0;
-  }, [mode, email, password, confirmPassword]);
 
   async function parseResponse(response) {
     const contentType = response.headers.get("content-type") || "";
@@ -62,7 +50,20 @@ export default function Login({ onLoginSuccess }) {
     setError("");
     setInfo("");
 
-    if (!canSubmit) {
+    const formData = new FormData(e.currentTarget);
+    const emailInput = String(formData.get("email") || "").trim();
+    const passwordInput = String(formData.get("password") || "");
+    const confirmPasswordInput = String(formData.get("confirmPassword") || "");
+
+    setEmail(emailInput);
+    setPassword(passwordInput);
+    setConfirmPassword(confirmPasswordInput);
+
+    const hasRequiredFields = mode === "create"
+      ? emailInput.length > 0 && passwordInput.trim().length > 0 && confirmPasswordInput.trim().length > 0
+      : emailInput.length > 0 && passwordInput.trim().length > 0;
+
+    if (!hasRequiredFields) {
       setError(
         mode === "create"
           ? "Please enter email, password, and confirm password."
@@ -71,7 +72,7 @@ export default function Login({ onLoginSuccess }) {
       return;
     }
 
-    if (mode === "create" && password !== confirmPassword) {
+    if (mode === "create" && passwordInput !== confirmPasswordInput) {
       setError("Passwords do not match.");
       return;
     }
@@ -84,8 +85,8 @@ export default function Login({ onLoginSuccess }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            email: email.trim(),
-            password,
+            email: emailInput,
+            password: passwordInput,
           }),
         });
 
@@ -98,7 +99,7 @@ export default function Login({ onLoginSuccess }) {
         setInfo("Account created. Signing you in...");
       }
 
-      await signInWithCredentials({ emailInput: email, passwordInput: password });
+      await signInWithCredentials({ emailInput, passwordInput });
     } catch (err) {
       setError(
         err?.message
@@ -123,6 +124,7 @@ export default function Login({ onLoginSuccess }) {
             <input
               className="auth-input"
               type="email"
+              name="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
@@ -135,6 +137,7 @@ export default function Login({ onLoginSuccess }) {
             <input
               className="auth-input"
               type="password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -148,6 +151,7 @@ export default function Login({ onLoginSuccess }) {
               <input
                 className="auth-input"
                 type="password"
+                name="confirmPassword"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
@@ -159,7 +163,7 @@ export default function Login({ onLoginSuccess }) {
           {error ? <div className="auth-error">{error}</div> : null}
           {info ? <div className="auth-footnote">{info}</div> : null}
 
-          <button className="primary-btn auth-btn" type="submit" disabled={!canSubmit}>
+          <button className="primary-btn auth-btn" type="submit">
             {mode === "create" ? "Create Account" : "Sign in"}
           </button>
         </form>
