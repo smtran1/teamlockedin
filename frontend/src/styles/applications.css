@@ -18,6 +18,13 @@
   margin-bottom: 14px;
 }
 
+.entry-head--split {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .entry-title {
   margin: 0;
   font-size: 24px;
@@ -58,6 +65,11 @@
   color: rgba(255, 255, 255, 0.68);
 }
 
+.field-error {
+  color: #fecaca;
+  font-size: 12px;
+}
+
 .form-field input,
 .form-field select,
 .form-field textarea {
@@ -91,6 +103,33 @@
   display: grid;
   grid-template-columns: 1fr 110px;
   gap: 10px;
+}
+
+.salary-row--checkbox {
+  grid-template-columns: 1fr 120px;
+}
+
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+}
+
+.checkbox-field input {
+  width: auto;
+}
+
+.form-collapsed-note {
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 16px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .submit-actions {
@@ -190,5 +229,10 @@
   .log-footer {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .entry-head--split {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
