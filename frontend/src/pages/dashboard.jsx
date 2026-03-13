@@ -15,10 +15,21 @@ function normalize(value) {
 
 function toTitleCase(value) {
   return String(value ?? "")
-    .split("_")
+    .split(/[_-]/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function normalizePositionType(value) {
+  const normalized = String(value ?? "").trim();
+
+  if (normalized === "full_time" || normalized === "full-time") return "Full-time";
+  if (normalized === "part_time" || normalized === "part-time") return "Part-time";
+  if (normalized.toLowerCase() === "contractor") return "Contractor";
+  if (normalized.toLowerCase() === "internship") return "Internship";
+
+  return normalized;
 }
 
 function formatCardDate(value) {
@@ -79,7 +90,7 @@ function buildUpdatePayload(application, jobStatus) {
     job_title: application.job_title ?? "",
     company: application.company ?? "",
     job_location: application.job_location ?? "",
-    position_type: application.position_type ?? "",
+    position_type: normalizePositionType(application.position_type),
     posting_date: application.posting_date ? String(application.posting_date).slice(0, 10) : "",
     closing_date: application.closing_date ? String(application.closing_date).slice(0, 10) : "",
     job_status: jobStatus,

@@ -7,7 +7,7 @@ const INITIAL_FORM = {
   job_title: "",
   company: "",
   job_location: "",
-  position_type: "full_time",
+  position_type: "Full-time",
   posting_date: "",
   closing_date: "",
   job_status: "applied",
@@ -20,6 +20,10 @@ const INITIAL_FORM = {
 
 function formatPosition(positionType) {
   const map = {
+    "Full-time": "Full-time",
+    "Part-time": "Part-time",
+    Contractor: "Contractor",
+    Internship: "Internship",
     full_time: "Full-time",
     part_time: "Part-time",
     contractor: "Contractor",
@@ -37,10 +41,21 @@ function formatMoney(amount, salaryHourly) {
 
 function toTitleCase(value) {
   return String(value ?? "")
-    .split("_")
+    .split(/[_-]/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function normalizePositionType(value) {
+  const normalized = String(value ?? "").trim();
+
+  if (normalized === "full_time" || normalized === "full-time") return "Full-time";
+  if (normalized === "part_time" || normalized === "part-time") return "Part-time";
+  if (normalized.toLowerCase() === "contractor") return "Contractor";
+  if (normalized.toLowerCase() === "internship") return "Internship";
+
+  return normalized || "Full-time";
 }
 
 function buildPayload(form, userEmail) {
@@ -209,7 +224,7 @@ export default function Applications({
       job_title: application.job_title ?? "",
       company: application.company ?? "",
       job_location: application.job_location ?? "",
-      position_type: application.position_type ?? "full_time",
+      position_type: normalizePositionType(application.position_type),
       posting_date: application.posting_date ? String(application.posting_date).slice(0, 10) : "",
       closing_date: application.closing_date ? String(application.closing_date).slice(0, 10) : "",
       job_status: application.job_status ?? "applied",
@@ -345,10 +360,10 @@ export default function Applications({
                     onChange={(event) => updateField("position_type", event.target.value)}
                     aria-invalid={Boolean(errors.position_type)}
                   >
-                    <option value="full_time">Full-time</option>
-                    <option value="part_time">Part-time</option>
-                    <option value="contractor">Contractor</option>
-                    <option value="internship">Internship</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contractor">Contractor</option>
+                    <option value="Internship">Internship</option>
                   </select>
                   <FieldError message={errors.position_type} />
                 </label>

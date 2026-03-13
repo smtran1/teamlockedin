@@ -61,6 +61,26 @@ function parseOptionalSalary(value) {
   return Number.isFinite(numericValue) ? numericValue : Number.NaN;
 }
 
+const POSITION_TYPE_MAP = {
+  'full-time': 'Full-time',
+  full_time: 'Full-time',
+  'part-time': 'Part-time',
+  part_time: 'Part-time',
+  contractor: 'Contractor',
+  internship: 'Internship',
+};
+
+const VALID_POSITION_TYPES = new Set(Object.values(POSITION_TYPE_MAP));
+
+function normalizePositionType(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-');
+
+  return POSITION_TYPE_MAP[normalized] || String(value ?? '').trim();
+}
+
 function validateApplicationPayload(payload, rawBody = {}) {
   const errors = [];
 
@@ -69,6 +89,9 @@ function validateApplicationPayload(payload, rawBody = {}) {
   if (!payload.job_location) errors.push('Job location is required.');
   if (!payload.position_type) errors.push('Position type is required.');
   if (!payload.job_status) errors.push('Job status is required.');
+  if (payload.position_type && !VALID_POSITION_TYPES.has(payload.position_type)) {
+    errors.push('Position type must be Full-time, Part-time, Contractor, or Internship.');
+  }
 
   if (payload.posting_date && Number.isNaN(Date.parse(payload.posting_date))) {
     errors.push('Posting date must be a valid date.');
@@ -107,7 +130,7 @@ function toApplicationRecord(body, email) {
     job_title: String(body.job_title || '').trim(),
     company: String(body.company || '').trim(),
     job_location: String(body.job_location || '').trim(),
-    position_type: String(body.position_type || '').trim(),
+    position_type: normalizePositionType(body.position_type),
     posting_date: normalizeOptionalDate(body.posting_date),
     closing_date: normalizeOptionalDate(body.closing_date),
     job_status: String(body.job_status || '').trim(),
