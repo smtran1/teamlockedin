@@ -111,16 +111,17 @@ export default function App() {
 
   async function handleCreateApplication(payload) {
     const createdApplication = await createApplication(payload);
-    setApplications((prev) => [createdApplication, ...prev]);
+    setApplications((prev) => [{ ...createdApplication, doc_count: 0 }, ...prev]);
     return createdApplication;
   }
 
   async function handleUpdateApplication(applicationId, payload) {
     const updatedApplication = await updateApplication(applicationId, payload);
     setApplications((prev) =>
-      prev.map((application) =>
-        application.application_id === applicationId ? updatedApplication : application,
-      ),
+      prev.map((application) => {
+        if (application.application_id !== applicationId) return application;
+        return { ...updatedApplication, doc_count: application.doc_count };
+      }),
     );
     return updatedApplication;
   }

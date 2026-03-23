@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import lockedInLogo from "../assets/lockedindark.png";
+import { fetchDocumentBlob, fetchDocumentsForApplication, unlinkDocumentFromApplication } from "../lib/documentsApi";
+import { toTitleCase } from "../lib/formatting";
 
 const SEED_REMINDERS = [
   { id: 1, date: "Feb 26", text: "Follow-up Call", applicationId: 2 },
@@ -13,13 +15,6 @@ function normalize(value) {
   return String(value ?? "").toLowerCase().trim();
 }
 
-function toTitleCase(value) {
-  return String(value ?? "")
-    .split(/[_-]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 function normalizePositionType(value) {
   const normalized = String(value ?? "").trim();
@@ -137,7 +132,30 @@ function ApplicationCard({ app, deletingId, onDelete, onOpenDetails, onOpenStatu
     >
       <div className="app-card-header">
         <h3 className="app-title">{app.job_title}</h3>
-        <StatusPill status={app.job_status} onClick={() => onOpenStatusEditor(app)} />
+        <div className="app-card-badges">
+          {app.doc_count > 0 && (
+            <span
+              className="app-doc-count"
+              title={`${app.doc_count} linked document${app.doc_count !== 1 ? "s" : ""}`}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+              {app.doc_count}
+            </span>
+          )}
+          <StatusPill status={app.job_status} onClick={() => onOpenStatusEditor(app)} />
+        </div>
       </div>
 
       <div className="app-meta">
@@ -176,8 +194,12 @@ function ApplicationDetailModal({
   error,
   isSaving,
   isStatusFocused,
+  linkedDocuments,
+  isLoadingDocs,
   onClose,
   onSave,
+  onViewDocument,
+  onUnlinkDocument,
   statusValue,
   onStatusChange,
 }) {
@@ -244,6 +266,38 @@ function ApplicationDetailModal({
             <p>{application.application_notes || "No notes saved."}</p>
           </div>
 
+          <div className="dashboard-copy-block">
+            <span className="dashboard-detail-label">Linked Documents</span>
+            {isLoadingDocs ? (
+              <p className="dashboard-docs-loading">Loading documents...</p>
+            ) : !linkedDocuments || linkedDocuments.length === 0 ? (
+              <p className="dashboard-docs-empty">No documents linked to this application.</p>
+            ) : (
+              <ul className="dashboard-doc-list">
+                {linkedDocuments.map((doc) => (
+                  <li key={doc.id} className="dashboard-doc-item">
+                    <span className="dashboard-doc-type">{toTitleCase(doc.documentType)}</span>
+                    <span className="dashboard-doc-name">{doc.fileName || doc.title}</span>
+                    <button
+                      className="ghost-btn"
+                      type="button"
+                      onClick={() => onViewDocument(doc.id)}
+                    >
+                      View
+                    </button>
+                    <button
+                      className="danger-btn"
+                      type="button"
+                      onClick={() => onUnlinkDocument(doc.id)}
+                    >
+                      Unlink
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="dashboard-modal-actions">
             {application.job_url ? (
               <a className="ghost-btn dashboard-modal-link" href={application.job_url} target="_blank" rel="noreferrer">
@@ -287,6 +341,9 @@ export default function Dashboard({
   const [detailError, setDetailError] = useState("");
   const [isSavingDetail, setIsSavingDetail] = useState(false);
   const [detailMode, setDetailMode] = useState("view");
+  const [linkedDocuments, setLinkedDocuments] = useState(null);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+  const viewedUrlsRef = useRef([]);
 
   useEffect(() => {
     if (!selectedApplication) return;
@@ -361,26 +418,37 @@ export default function Dashboard({
     }
   }
 
-  function handleOpenDetails(application) {
+  function openApplicationDetail(application, mode) {
     setSelectedApplication(application);
     setDetailStatus(application.job_status);
     setDetailError("");
-    setDetailMode("view");
+    setDetailMode(mode);
+    setLinkedDocuments(null);
+    setIsLoadingDocs(true);
+    fetchDocumentsForApplication(application.application_id)
+      .then((docs) => setLinkedDocuments(docs))
+      .catch(() => setLinkedDocuments([]))
+      .finally(() => setIsLoadingDocs(false));
+  }
+
+  function handleOpenDetails(application) {
+    openApplicationDetail(application, "view");
   }
 
   function handleOpenStatusEditor(application) {
-    setSelectedApplication(application);
-    setDetailStatus(application.job_status);
-    setDetailError("");
-    setDetailMode("status");
+    openApplicationDetail(application, "status");
   }
 
   function handleCloseDetails() {
     if (isSavingDetail) return;
+    viewedUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    viewedUrlsRef.current = [];
     setSelectedApplication(null);
     setDetailStatus("");
     setDetailError("");
     setDetailMode("view");
+    setLinkedDocuments(null);
+    setIsLoadingDocs(false);
   }
 
   async function handleSaveStatus() {
@@ -399,6 +467,27 @@ export default function Dashboard({
       setDetailError(error?.message || "Unable to update status.");
     } finally {
       setIsSavingDetail(false);
+    }
+  }
+
+  async function handleViewDocument(documentId) {
+    try {
+      const blob = await fetchDocumentBlob(documentId);
+      const url = URL.createObjectURL(blob);
+      viewedUrlsRef.current.push(url);
+      window.open(url, "_blank");
+    } catch (error) {
+      setDetailError(error?.message || "Could not open document.");
+    }
+  }
+
+  async function handleUnlinkDocument(documentId) {
+    if (!selectedApplication) return;
+    try {
+      await unlinkDocumentFromApplication(documentId, selectedApplication.application_id);
+      setLinkedDocuments((prev) => (prev ?? []).filter((doc) => doc.id !== documentId));
+    } catch (error) {
+      setDetailError(error?.message || "Could not unlink document.");
     }
   }
 
@@ -667,11 +756,15 @@ export default function Dashboard({
         <ApplicationDetailModal
           application={selectedApplication}
           error={detailError}
-        isSaving={isSavingDetail}
-        isStatusFocused={detailMode === "status"}
-        onClose={handleCloseDetails}
-        onSave={handleSaveStatus}
-        onStatusChange={setDetailStatus}
+          isSaving={isSavingDetail}
+          isStatusFocused={detailMode === "status"}
+          linkedDocuments={linkedDocuments}
+          isLoadingDocs={isLoadingDocs}
+          onClose={handleCloseDetails}
+          onSave={handleSaveStatus}
+          onViewDocument={handleViewDocument}
+          onUnlinkDocument={handleUnlinkDocument}
+          onStatusChange={setDetailStatus}
           statusValue={detailStatus}
         />
       ) : null}

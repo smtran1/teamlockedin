@@ -1,32 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import lockedInLogo from "../assets/lockedindark.png";
 import "../styles/dashboard.css";
 import "../styles/documents.css";
-
-const SEED_DOCUMENTS = [
-  {
-    id: 1,
-    title: "Amazon Data Analyst Resume",
-    documentType: "resume",
-    uploadDate: "2026-03-01",
-    notes: "Tailored for SQL-heavy analytics role.",
-    linkedApplication: "Amazon — Data Analyst",
-    fileName: "amazon-data-analyst-resume.pdf",
-    fileSize: 218004,
-    objectUrl: null,
-  },
-  {
-    id: 2,
-    title: "Google SWE Cover Letter",
-    documentType: "cover_letter",
-    uploadDate: "2026-02-26",
-    notes: "Highlights distributed systems project work.",
-    linkedApplication: "Google — Software Engineer Intern",
-    fileName: "google-swe-cover-letter.pdf",
-    fileSize: 126530,
-    objectUrl: null,
-  },
-];
+import {
+  fetchDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument as apiDeleteDocument,
+  fetchDocumentBlob,
+} from "../lib/documentsApi";
+import { fetchApplications } from "../lib/applicationsApi";
+import { toTitleCase, formatFileSize } from "../lib/formatting";
 
 const INITIAL_FORM = {
   id: null,
@@ -34,7 +18,7 @@ const INITIAL_FORM = {
   documentType: "resume",
   uploadDate: "",
   notes: "",
-  linkedApplication: "",
+  applicationIds: [],
   file: null,
 };
 
@@ -42,20 +26,6 @@ function normalize(value) {
   return String(value ?? "").toLowerCase().trim();
 }
 
-function formatDocumentType(value) {
-  return String(value)
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatFileSize(bytes) {
-  if (!bytes || Number.isNaN(Number(bytes))) return "Unknown size";
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  return `${(kb / 1024).toFixed(2)} MB`;
-}
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -85,10 +55,78 @@ function DocumentModal({ title, children, onClose }) {
   );
 }
 
-function DocumentForm({ initial, isEditing, onSave, onCancel }) {
+function MultiSelectDropdown({ options, selected, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function toggleOption(value) {
+    if (selected.includes(value)) {
+      onChange(selected.filter((v) => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  }
+
+  const selectedLabels = options
+    .filter((opt) => selected.includes(opt.value))
+    .map((opt) => opt.label);
+
+  const displayText =
+    selectedLabels.length === 0
+      ? "None"
+      : selectedLabels.length === 1
+      ? selectedLabels[0]
+      : `${selectedLabels.length} applications selected`;
+
+  return (
+    <div className="multiselect" ref={containerRef}>
+      <button
+        type="button"
+        className="multiselect-toggle"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+      >
+        <span className="multiselect-label">{displayText}</span>
+        <span className="multiselect-arrow">{isOpen ? "▲" : "▼"}</span>
+      </button>
+      {isOpen && (
+        <div className="multiselect-dropdown" role="listbox" aria-multiselectable="true">
+          {options.length === 0 ? (
+            <div className="multiselect-empty">No applications available</div>
+          ) : (
+            options.map((opt) => (
+              <label key={opt.value} className="multiselect-option">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt.value)}
+                  onChange={() => toggleOption(opt.value)}
+                />
+                {opt.label}
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentForm({ initial, isEditing, applications, isSaving, onSave, onCancel }) {
   const [form, setForm] = useState({
     ...initial,
     uploadDate: initial.uploadDate || todayDateString(),
+    applicationIds: initial.applicationIds ?? [],
     file: null,
   });
   const [error, setError] = useState("");
@@ -116,17 +154,29 @@ function DocumentForm({ initial, isEditing, onSave, onCancel }) {
       return;
     }
 
+    if (form.file) {
+      const ALLOWED_EXTS = /\.(pdf|doc|docx|txt)$/i;
+      const MAX_SIZE = 10 * 1024 * 1024;
+      if (!ALLOWED_EXTS.test(form.file.name)) {
+        setError("Only PDF, DOC, DOCX, and TXT files are allowed.");
+        return;
+      }
+      if (form.file.size > MAX_SIZE) {
+        setError("File size must not exceed 10 MB.");
+        return;
+      }
+    }
+
     onSave({
       ...form,
       title: form.title.trim(),
       notes: form.notes.trim(),
-      linkedApplication: form.linkedApplication.trim(),
     });
   }
 
   return (
     <form className="document-form" onSubmit={submitForm}>
-      {error ? <div className="form-error">{error}</div> : null}
+      {error ? <div className="form-error" role="alert">{error}</div> : null}
 
       <div className="document-form-grid">
         <label className="form-field">
@@ -162,14 +212,17 @@ function DocumentForm({ initial, isEditing, onSave, onCancel }) {
           />
         </label>
 
-        <label className="form-field">
-          <span className="form-label">Linked Application (Optional)</span>
-          <input
-            value={form.linkedApplication}
-            onChange={(event) => updateField("linkedApplication", event.target.value)}
-            placeholder="e.g., Amazon — Data Analyst"
+        <div className="form-field">
+          <span className="form-label">Linked Applications (Optional)</span>
+          <MultiSelectDropdown
+            options={applications.map((app) => ({
+              value: app.application_id,
+              label: `${app.company} — ${app.job_title}`,
+            }))}
+            selected={form.applicationIds}
+            onChange={(ids) => updateField("applicationIds", ids)}
           />
-        </label>
+        </div>
 
         <label className="form-field form-field--full">
           <span className="form-label">Notes (Optional)</span>
@@ -192,11 +245,11 @@ function DocumentForm({ initial, isEditing, onSave, onCancel }) {
       </div>
 
       <div className="documents-modal-actions">
-        <button className="ghost-btn" type="button" onClick={onCancel}>
+        <button className="ghost-btn" type="button" onClick={onCancel} disabled={isSaving}>
           Cancel
         </button>
-        <button className="primary-btn" type="submit">
-          {isEditing ? "Update Document" : "Save Document"}
+        <button className="primary-btn" type="submit" disabled={isSaving}>
+          {isSaving ? "Saving..." : isEditing ? "Update Document" : "Save Document"}
         </button>
       </div>
     </form>
@@ -204,7 +257,10 @@ function DocumentForm({ initial, isEditing, onSave, onCancel }) {
 }
 
 export default function Documents({ onLogout, onNavigate }) {
-  const [documents, setDocuments] = useState(SEED_DOCUMENTS);
+  const [documents, setDocuments] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState("");
 
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -213,6 +269,31 @@ export default function Documents({ onLogout, onNavigate }) {
 
   const [modalState, setModalState] = useState({ open: false, editing: null });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingId, setIsDeletingId] = useState(null);
+  const [isViewingId, setIsViewingId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([fetchDocuments(), fetchApplications()])
+      .then(([docs, apps]) => {
+        if (!cancelled) {
+          setDocuments(docs);
+          setApplications(apps);
+          setApiError("");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setApiError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -272,75 +353,92 @@ export default function Documents({ onLogout, onNavigate }) {
     setModalState({ open: false, editing: null });
   }
 
-  function saveDocument(payload) {
-    const nextFile = payload.file;
-    const nextObjectUrl = nextFile ? URL.createObjectURL(nextFile) : payload.objectUrl ?? null;
-
-    if (payload.id == null) {
-      const nextId = Math.max(0, ...documents.map((item) => item.id)) + 1;
-      const created = {
-        id: nextId,
-        title: payload.title,
-        documentType: payload.documentType,
-        uploadDate: payload.uploadDate,
-        notes: payload.notes,
-        linkedApplication: payload.linkedApplication,
-        fileName: nextFile ? nextFile.name : "Uploaded file",
-        fileSize: nextFile ? nextFile.size : 0,
-        objectUrl: nextObjectUrl,
-      };
-      setDocuments((prev) => [created, ...prev]);
+  async function saveDocument(payload) {
+    if (isSaving) return;
+    setIsSaving(true);
+    setApiError("");
+    try {
+      if (payload.id == null) {
+        const created = await createDocument(payload);
+        setDocuments((prev) => [created, ...prev]);
+      } else {
+        await updateDocument(payload.id, payload);
+        const linkedAppNames = (payload.applicationIds || [])
+          .map((id) => applications.find((a) => a.application_id === id))
+          .filter(Boolean)
+          .map((a) => `${a.company} — ${a.job_title}`);
+        setDocuments((prev) =>
+          prev.map((item) => {
+            if (item.id !== payload.id) return item;
+            if (payload.file && item.objectUrl) URL.revokeObjectURL(item.objectUrl);
+            return {
+              ...item,
+              title: payload.title,
+              documentType: payload.documentType,
+              uploadDate: payload.uploadDate,
+              notes: payload.notes,
+              applicationIds: payload.applicationIds,
+              linkedApplications: linkedAppNames,
+              linkedApplication: linkedAppNames.join(", "),
+              fileName: payload.file ? payload.file.name : item.fileName,
+              fileSize: payload.file ? payload.file.size : item.fileSize,
+              objectUrl: payload.file ? null : item.objectUrl,
+            };
+          })
+        );
+      }
       closeModal();
-      return;
+    } catch (err) {
+      setApiError(err.message);
+    } finally {
+      setIsSaving(false);
     }
-
-    setDocuments((prev) =>
-      prev.map((item) => {
-        if (item.id !== payload.id) return item;
-
-        if (nextFile && item.objectUrl) {
-          URL.revokeObjectURL(item.objectUrl);
-        }
-
-        return {
-          ...item,
-          title: payload.title,
-          documentType: payload.documentType,
-          uploadDate: payload.uploadDate,
-          notes: payload.notes,
-          linkedApplication: payload.linkedApplication,
-          fileName: nextFile ? nextFile.name : item.fileName,
-          fileSize: nextFile ? nextFile.size : item.fileSize,
-          objectUrl: nextFile ? nextObjectUrl : item.objectUrl,
-        };
-      })
-    );
-
-    closeModal();
   }
 
   function confirmDelete(document) {
     setDeleteTarget(document);
   }
 
-  function deleteDocument() {
-    if (!deleteTarget) return;
+  async function deleteDocument() {
+    if (!deleteTarget || isDeletingId === deleteTarget.id) return;
 
-    if (deleteTarget.objectUrl) {
-      URL.revokeObjectURL(deleteTarget.objectUrl);
+    setIsDeletingId(deleteTarget.id);
+    setApiError("");
+    try {
+      await apiDeleteDocument(deleteTarget.id);
+      if (deleteTarget.objectUrl) URL.revokeObjectURL(deleteTarget.objectUrl);
+      setDocuments((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      setApiError(err.message);
+      setDeleteTarget(null);
+    } finally {
+      setIsDeletingId(null);
     }
-
-    setDocuments((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-    setDeleteTarget(null);
   }
 
-  function viewDocument(document) {
+  async function viewDocument(document) {
     if (document.objectUrl) {
       window.open(document.objectUrl, "_blank", "noopener,noreferrer");
       return;
     }
 
-    window.alert("This seeded document has metadata only. Upload/replace it to enable preview.");
+    if (isViewingId === document.id) return;
+
+    setIsViewingId(document.id);
+    setApiError("");
+    try {
+      const blob = await fetchDocumentBlob(document.id);
+      const url = URL.createObjectURL(blob);
+      setDocuments((prev) =>
+        prev.map((item) => (item.id === document.id ? { ...item, objectUrl: url } : item))
+      );
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setApiError(err.message);
+    } finally {
+      setIsViewingId(null);
+    }
   }
 
   return (
@@ -443,41 +541,49 @@ export default function Documents({ onLogout, onNavigate }) {
           </div>
         </section>
 
+        {apiError ? <div className="form-error" role="alert">{apiError}</div> : null}
+
         <section className="documents-list" aria-label="Documents list">
-          {!filtered.length ? (
+          {loading ? (
+            <div className="documents-empty">Loading documents...</div>
+          ) : !filtered.length ? (
             <div className="documents-empty">No documents match the current filters.</div>
           ) : (
             filtered.map((item) => (
               <article className="document-card" key={item.id}>
-                <div className="document-head">
-                  <div>
+                <div className="document-card-row">
+                  <div className="document-card-main">
                     <h3 className="document-title-item">{item.title}</h3>
-                    <p className="document-submeta">
-                      {formatDocumentType(item.documentType)} • Uploaded {item.uploadDate}
-                    </p>
+                    <span className="document-pill">{toTitleCase(item.documentType)}</span>
                   </div>
-                  <span className="document-pill">{formatDocumentType(item.documentType)}</span>
+                  <div className="document-actions">
+                    <button
+                      className="doc-action-btn"
+                      type="button"
+                      onClick={() => viewDocument(item)}
+                      disabled={isViewingId === item.id}
+                    >
+                      {isViewingId === item.id ? "Loading..." : "View"}
+                    </button>
+                    <button className="doc-action-btn" type="button" onClick={() => openEditModal(item)}>
+                      Edit
+                    </button>
+                    <button
+                      className="doc-action-btn doc-action-btn--danger"
+                      type="button"
+                      onClick={() => confirmDelete(item)}
+                      disabled={isDeletingId === item.id}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
-                <div className="document-details-grid">
-                  <div>File: {item.fileName || "No file"}</div>
-                  <div>Size: {formatFileSize(item.fileSize)}</div>
-                  <div>Linked App: {item.linkedApplication || "Not linked"}</div>
-                </div>
+                <p className="document-meta-line">
+                  {toTitleCase(item.documentType)} • {item.uploadDate} • {item.fileName || "No file"} • {formatFileSize(item.fileSize)}{item.linkedApplication ? ` • ${item.linkedApplication}` : ""}
+                </p>
 
                 {item.notes ? <p className="document-notes">{item.notes}</p> : null}
-
-                <div className="document-actions">
-                  <button className="ghost-btn" type="button" onClick={() => viewDocument(item)}>
-                    View
-                  </button>
-                  <button className="ghost-btn" type="button" onClick={() => openEditModal(item)}>
-                    Replace / Edit
-                  </button>
-                  <button className="danger-btn" type="button" onClick={() => confirmDelete(item)}>
-                    Delete
-                  </button>
-                </div>
               </article>
             ))
           )}
@@ -489,6 +595,8 @@ export default function Documents({ onLogout, onNavigate }) {
           <DocumentForm
             initial={modalState.editing ?? INITIAL_FORM}
             isEditing={Boolean(modalState.editing)}
+            applications={applications}
+            isSaving={isSaving}
             onSave={saveDocument}
             onCancel={closeModal}
           />
@@ -501,10 +609,20 @@ export default function Documents({ onLogout, onNavigate }) {
             Delete <strong>{deleteTarget.title}</strong>? This action cannot be undone.
           </p>
           <div className="documents-modal-actions">
-            <button className="ghost-btn" type="button" onClick={() => setDeleteTarget(null)}>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              disabled={isDeletingId === deleteTarget.id}
+            >
               Cancel
             </button>
-            <button className="danger-btn" type="button" onClick={deleteDocument}>
+            <button
+              className="danger-btn"
+              type="button"
+              onClick={deleteDocument}
+              disabled={isDeletingId === deleteTarget.id}
+            >
               Delete
             </button>
           </div>
