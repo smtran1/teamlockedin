@@ -23,9 +23,15 @@ export default function App() {
   const [applicationsError, setApplicationsError] = useState("");
   const [hasLoadedApplications, setHasLoadedApplications] = useState(false);
 
+  function clearAuth() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userEmail");
+  }
+
   useEffect(() => {
     async function checkAuth() {
-      const token = getStoredToken();
+      const token = localStorage.getItem("token");
+
       if (!token) {
         setAuthStatus("unauthenticated");
         setUserEmail("");
@@ -46,8 +52,12 @@ export default function App() {
           setAuthStatus("authenticated");
           return;
         }
+
+        clearAuth();
+        setAuthStatus("unauthenticated");
       } catch {
-        // Falls through to unauthenticated state.
+        clearAuth();
+        setAuthStatus("unauthenticated");
       }
 
       setAuthStatus("unauthenticated");

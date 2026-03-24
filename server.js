@@ -70,6 +70,7 @@ app.get('/dashboard', (req, res) => {
 async function createConnection() {
   return mysql.createConnection({
     host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT || 3306),
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
@@ -94,6 +95,11 @@ function normalizeOptionalDate(value) {
   return trimmed ? trimmed : null;
 }
 
+function normalizeOptionalTime(value) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed ? trimmed : null;
+}
+
 function parseOptionalSalary(value) {
   if (value === '' || value === null || value === undefined) {
     return null;
@@ -113,6 +119,9 @@ const POSITION_TYPE_MAP = {
 };
 
 const VALID_POSITION_TYPES = new Set(Object.values(POSITION_TYPE_MAP));
+const VALID_REMINDER_CATEGORIES = new Set(['Interview', 'Follow-up', 'Reference', 'Deadline', 'Networking']);
+const VALID_REMINDER_PRIORITIES = new Set(['Low', 'Medium', 'High', 'Urgent']);
+const VALID_REMINDER_STATUSES = new Set(['Pending', 'Done']);
 
 function parseApplicationIds(raw) {
   try {
@@ -193,6 +202,51 @@ function toApplicationRecord(body, email) {
     job_description: normalizeOptionalString(body.job_description),
     application_notes: normalizeOptionalString(body.application_notes),
   };
+}
+
+function toReminderRecord(body, email) {
+  return {
+    email,
+    title: String(body.title || '').trim(),
+    category: normalizeOptionalString(body.category),
+    priority: normalizeOptionalString(body.priority),
+    status: String(body.status || 'Pending').trim() || 'Pending',
+    dueDate: normalizeOptionalDate(body.dueDate),
+    dueTime: normalizeOptionalTime(body.dueTime),
+    company: normalizeOptionalString(body.company),
+    role: normalizeOptionalString(body.role),
+    notes: normalizeOptionalString(body.notes),
+  };
+}
+
+function validateReminderPayload(reminder) {
+  const errors = [];
+
+  if (!reminder.title) errors.push('Reminder title is required.');
+  if (!reminder.dueDate) errors.push('Reminder due date is required.');
+  if (!reminder.dueTime) errors.push('Reminder due time is required.');
+
+  if (reminder.dueDate && Number.isNaN(Date.parse(reminder.dueDate))) {
+    errors.push('Reminder due date must be a valid date.');
+  }
+
+  if (reminder.dueTime && !/^\d{2}:\d{2}(:\d{2})?$/.test(reminder.dueTime)) {
+    errors.push('Reminder due time must be a valid time.');
+  }
+
+  if (reminder.category && !VALID_REMINDER_CATEGORIES.has(reminder.category)) {
+    errors.push('Reminder category is invalid.');
+  }
+
+  if (reminder.priority && !VALID_REMINDER_PRIORITIES.has(reminder.priority)) {
+    errors.push('Reminder priority is invalid.');
+  }
+
+  if (reminder.status && !VALID_REMINDER_STATUSES.has(reminder.status)) {
+    errors.push('Reminder status is invalid.');
+  }
+
+  return errors;
 }
 
 async function authenticateToken(req, res, next) {
@@ -562,6 +616,220 @@ app.delete('/api/jobs/:applicationId', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/reminders', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [rows] = await connection.execute(
+        `SELECT
+          Reminder_ID,
+          Email,
+          Reminder_Title,
+          Reminder_Category,
+          Reminder_Priority,
+          Reminder_Status,
+          Reminder_Due_Date,
+          Reminder_Due_Time,
+          Reminder_Company,
+          Reminder_Role,
+          Reminder_Notes
+        FROM reminder
+        WHERE LOWER(Email) = ?
+        ORDER BY Reminder_Due_Date ASC, Reminder_Due_Time ASC, Reminder_ID DESC`,
+        [email],
+      );
+
+      res.status(200).json({ reminders: rows });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error retrieving reminders: ${detail}` : 'Error retrieving reminders.' });
+  }
+});
+
+app.post('/api/reminders', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  const reminder = toReminderRecord(req.body, email);
+  const validationErrors = validateReminderPayload(reminder);
+
+  if (validationErrors.length > 0) {
+    return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
+  }
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [result] = await connection.execute(
+        `INSERT INTO reminder (
+          Email,
+          Reminder_Title,
+          Reminder_Category,
+          Reminder_Priority,
+          Reminder_Status,
+          Reminder_Due_Date,
+          Reminder_Due_Time,
+          Reminder_Company,
+          Reminder_Role,
+          Reminder_Notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          reminder.email,
+          reminder.title,
+          reminder.category,
+          reminder.priority,
+          reminder.status,
+          reminder.dueDate,
+          reminder.dueTime,
+          reminder.company,
+          reminder.role,
+          reminder.notes,
+        ],
+      );
+
+      const [rows] = await connection.execute(
+        `SELECT
+          Reminder_ID,
+          Email,
+          Reminder_Title,
+          Reminder_Category,
+          Reminder_Priority,
+          Reminder_Status,
+          Reminder_Due_Date,
+          Reminder_Due_Time,
+          Reminder_Company,
+          Reminder_Role,
+          Reminder_Notes
+        FROM reminder
+        WHERE Reminder_ID = ? AND LOWER(Email) = ?`,
+        [result.insertId, email],
+      );
+
+      res.status(201).json({ reminder: rows[0] });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error creating reminder: ${detail}` : 'Error creating reminder.' });
+  }
+});
+
+app.put('/api/reminders/:reminderId', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  const reminderId = Number(req.params.reminderId);
+
+  if (!Number.isInteger(reminderId) || reminderId <= 0) {
+    return res.status(400).json({ message: 'Invalid reminder id.' });
+  }
+
+  const reminder = toReminderRecord(req.body, email);
+  const validationErrors = validateReminderPayload(reminder);
+
+  if (validationErrors.length > 0) {
+    return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
+  }
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [result] = await connection.execute(
+        `UPDATE reminder
+        SET
+          Reminder_Title = ?,
+          Reminder_Category = ?,
+          Reminder_Priority = ?,
+          Reminder_Status = ?,
+          Reminder_Due_Date = ?,
+          Reminder_Due_Time = ?,
+          Reminder_Company = ?,
+          Reminder_Role = ?,
+          Reminder_Notes = ?
+        WHERE Reminder_ID = ? AND LOWER(Email) = ?`,
+        [
+          reminder.title,
+          reminder.category,
+          reminder.priority,
+          reminder.status,
+          reminder.dueDate,
+          reminder.dueTime,
+          reminder.company,
+          reminder.role,
+          reminder.notes,
+          reminderId,
+          email,
+        ],
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Reminder not found.' });
+      }
+
+      const [rows] = await connection.execute(
+        `SELECT
+          Reminder_ID,
+          Email,
+          Reminder_Title,
+          Reminder_Category,
+          Reminder_Priority,
+          Reminder_Status,
+          Reminder_Due_Date,
+          Reminder_Due_Time,
+          Reminder_Company,
+          Reminder_Role,
+          Reminder_Notes
+        FROM reminder
+        WHERE Reminder_ID = ? AND LOWER(Email) = ?`,
+        [reminderId, email],
+      );
+
+      res.status(200).json({ reminder: rows[0] });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error updating reminder: ${detail}` : 'Error updating reminder.' });
+  }
+});
+
+app.delete('/api/reminders/:reminderId', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  const reminderId = Number(req.params.reminderId);
+
+  if (!Number.isInteger(reminderId) || reminderId <= 0) {
+    return res.status(400).json({ message: 'Invalid reminder id.' });
+  }
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [result] = await connection.execute(
+        'DELETE FROM reminder WHERE Reminder_ID = ? AND LOWER(Email) = ?',
+        [reminderId, email],
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Reminder not found.' });
+      }
+
+      res.status(204).send();
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error deleting reminder: ${detail}` : 'Error deleting reminder.' });
+  }
+});
+
 app.post('/api/documents', upload.single('file'), authenticateToken, async (req, res) => {
   const email = normalizeEmail(req.user.email);
 
@@ -906,6 +1174,18 @@ app.delete('/api/documents/:documentId', authenticateToken, async (req, res) => 
     console.error(error);
     res.status(500).json({ message: 'Error deleting document.' });
   }
+});
+
+app.use((error, _req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({ message: error.message });
+  }
+
+  if (error && error.message && error.message.includes('Only PDF, DOC, DOCX, and TXT files are allowed.')) {
+    return res.status(400).json({ message: error.message });
+  }
+
+  return next(error);
 });
 
 if (servingReactBuild) {
