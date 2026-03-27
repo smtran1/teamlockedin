@@ -91,6 +91,57 @@ export async function deleteReminder(reminderId) {
 
   return true;
 }
+export async function getContacts() {
+  const response = await authenticatedFetch("/api/contacts");
+  if (!response.ok) {
+    throw new Error("Failed to load contacts.");
+  }
+  return response.json();
+}
+
+export async function createContact(payload) {
+  const response = await authenticatedFetch("/api/contacts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to create contact.");
+  }
+  return data;
+}
+
+export async function updateContact(id, payload) {
+  const response = await authenticatedFetch(`/api/contacts/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to update contact.");
+  }
+  return data;
+}
+
+export async function deleteContact(contactId) {
+  const response = await authenticatedFetch(`/api/contacts/${contactId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    let message = "Failed to delete contact.";
+    try {
+      const errorData = await response.json();
+      message = errorData.message || message;
+    } catch {
+      // leave default message
+    }
+    throw new Error(message);
+  }
+  return true;
+}
+
 export function getStoredToken() {
   return localStorage.getItem("token") || "";
 }

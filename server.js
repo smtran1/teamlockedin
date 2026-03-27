@@ -1175,6 +1175,239 @@ app.delete('/api/documents/:documentId', authenticateToken, async (req, res) => 
   }
 });
 
+// ─── Contacts ────────────────────────────────────────────────────────────────
+
+function toContactRecord(body, email) {
+  return {
+    email,
+    name: String(body.name || '').trim(),
+    company: String(body.company || '').trim(),
+    role: normalizeOptionalString(body.role),
+    relationshipStrength: String(body.relationshipStrength || 'warm').trim(),
+    contactEmail: normalizeOptionalString(body.contactEmail),
+    phone: normalizeOptionalString(body.phone),
+    linkedin: normalizeOptionalString(body.linkedin),
+    preferredCommunication: String(body.preferredCommunication || 'email').trim(),
+    lastContactedDate: body.lastContactedDate || null,
+    nextFollowupDate: body.nextFollowupDate || null,
+    notes: normalizeOptionalString(body.notes),
+  };
+}
+
+const VALID_RELATIONSHIP_STRENGTHS = ['weak', 'warm', 'strong', 'advocate'];
+const VALID_COMMUNICATION_PREFERENCES = ['email', 'phone', 'linkedin', 'text', 'in_person'];
+
+function validateContactPayload(contact) {
+  const errors = [];
+  if (!contact.name) errors.push('Contact name is required.');
+  if (!contact.company) errors.push('Company is required.');
+  if (!VALID_RELATIONSHIP_STRENGTHS.includes(contact.relationshipStrength)) {
+    errors.push('Invalid relationship strength.');
+  }
+  if (!VALID_COMMUNICATION_PREFERENCES.includes(contact.preferredCommunication)) {
+    errors.push('Invalid communication preference.');
+  }
+  return errors;
+}
+
+const CONTACT_SELECT_COLS = `
+  contact_id,
+  email,
+  contact_name,
+  contact_company,
+  contact_role,
+  relationship_strength,
+  contact_email,
+  contact_phone,
+  contact_linkedin,
+  preferred_communication,
+  last_contacted_date,
+  next_followup_date,
+  contact_notes`;
+
+app.get('/api/contacts', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  try {
+    const connection = await createConnection();
+    try {
+      const [rows] = await connection.execute(
+        `SELECT ${CONTACT_SELECT_COLS}
+        FROM contact
+        WHERE LOWER(email) = ?
+        ORDER BY next_followup_date ASC, contact_id DESC`,
+        [email],
+      );
+      res.status(200).json({ contacts: rows });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error retrieving contacts: ${detail}` : 'Error retrieving contacts.' });
+  }
+});
+
+app.post('/api/contacts', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  const contact = toContactRecord(req.body, email);
+  const validationErrors = validateContactPayload(contact);
+
+  if (validationErrors.length > 0) {
+    return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
+  }
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [result] = await connection.execute(
+        `INSERT INTO contact (
+          email,
+          contact_name,
+          contact_company,
+          contact_role,
+          relationship_strength,
+          contact_email,
+          contact_phone,
+          contact_linkedin,
+          preferred_communication,
+          last_contacted_date,
+          next_followup_date,
+          contact_notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          contact.email,
+          contact.name,
+          contact.company,
+          contact.role,
+          contact.relationshipStrength,
+          contact.contactEmail,
+          contact.phone,
+          contact.linkedin,
+          contact.preferredCommunication,
+          contact.lastContactedDate,
+          contact.nextFollowupDate,
+          contact.notes,
+        ],
+      );
+
+      const [rows] = await connection.execute(
+        `SELECT ${CONTACT_SELECT_COLS} FROM contact WHERE contact_id = ? AND LOWER(email) = ?`,
+        [result.insertId, email],
+      );
+
+      res.status(201).json({ contact: rows[0] });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error creating contact: ${detail}` : 'Error creating contact.' });
+  }
+});
+
+app.put('/api/contacts/:contactId', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  const contactId = Number(req.params.contactId);
+
+  if (!Number.isInteger(contactId) || contactId <= 0) {
+    return res.status(400).json({ message: 'Invalid contact id.' });
+  }
+
+  const contact = toContactRecord(req.body, email);
+  const validationErrors = validateContactPayload(contact);
+
+  if (validationErrors.length > 0) {
+    return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
+  }
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [result] = await connection.execute(
+        `UPDATE contact
+        SET
+          contact_name = ?,
+          contact_company = ?,
+          contact_role = ?,
+          relationship_strength = ?,
+          contact_email = ?,
+          contact_phone = ?,
+          contact_linkedin = ?,
+          preferred_communication = ?,
+          last_contacted_date = ?,
+          next_followup_date = ?,
+          contact_notes = ?
+        WHERE contact_id = ? AND LOWER(email) = ?`,
+        [
+          contact.name,
+          contact.company,
+          contact.role,
+          contact.relationshipStrength,
+          contact.contactEmail,
+          contact.phone,
+          contact.linkedin,
+          contact.preferredCommunication,
+          contact.lastContactedDate,
+          contact.nextFollowupDate,
+          contact.notes,
+          contactId,
+          email,
+        ],
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Contact not found.' });
+      }
+
+      const [rows] = await connection.execute(
+        `SELECT ${CONTACT_SELECT_COLS} FROM contact WHERE contact_id = ? AND LOWER(email) = ?`,
+        [contactId, email],
+      );
+
+      res.status(200).json({ contact: rows[0] });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error updating contact: ${detail}` : 'Error updating contact.' });
+  }
+});
+
+app.delete('/api/contacts/:contactId', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  const contactId = Number(req.params.contactId);
+
+  if (!Number.isInteger(contactId) || contactId <= 0) {
+    return res.status(400).json({ message: 'Invalid contact id.' });
+  }
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [result] = await connection.execute(
+        'DELETE FROM contact WHERE contact_id = ? AND LOWER(email) = ?',
+        [contactId, email],
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Contact not found.' });
+      }
+
+      res.status(204).send();
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    const detail = error.sqlMessage || error.message;
+    res.status(500).json({ message: detail ? `Error deleting contact: ${detail}` : 'Error deleting contact.' });
+  }
+});
+
 app.use((error, _req, res, next) => {
   if (error instanceof multer.MulterError) {
     return res.status(400).json({ message: error.message });
