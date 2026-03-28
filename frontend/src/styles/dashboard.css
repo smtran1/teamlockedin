@@ -6,6 +6,16 @@
   - Layout matches wireframe structure (top nav, metrics, controls, content split)
 */
 
+/* 
+  changes to make before presentation :D
+    - changable amount of stats boxes at top with updated dropdown functionality
+      (add + and - signs?)
+    - add table to save options for customized stats
+    - remove bulk edit and export buttons
+    - remove view dropdown
+    - add more sort options + clarification
+*/
+
 /* Reset */
 * { box-sizing: border-box; }
 /* Hard-stop any other stylesheet from painting a different page background */
@@ -226,20 +236,25 @@ a { color: inherit; }
 
 /* Metrics */
 .metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin: 16px 0 18px;
+  display: flex;
+  /* grid-template-columns: repeat(3, minmax(0, 1fr)); */
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  /*margin: 16px 0 18px;*/
 }
 
 .metric-card {
+  flex: 1;
+  min-width: 150px;
   background: linear-gradient(180deg, rgba(17, 24, 39, 0.82), rgba(17, 24, 39, 0.65));
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px 16px;
   box-shadow: var(--shadow-soft);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  box-sizing: border-box;
 }
 
 .metric-card::after {
@@ -250,6 +265,8 @@ a { color: inherit; }
   height: 260px;
   background: radial-gradient(circle at 30% 30%, rgba(56, 189, 248, 0.18), transparent 55%);
   transform: rotate(14deg);
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 .metric-label {
@@ -263,6 +280,62 @@ a { color: inherit; }
   font-size: 30px;
   font-weight: 800;
   letter-spacing: 0.3px;
+}
+
+.metric-dropdown {
+  background-color: #0d1b2a;
+  color: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  width: 90%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  appearance: auto;
+}
+
+.metric-dropdown:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.metric-dropdown:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.metric-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: #aaa;
+  font-size: 0.8rem;
+  cursor: pointer;
+  line-height: 1;
+  z-index: 1;
+}
+
+.metric-delete-btn:hover {
+  color: #ff4d4d;
+}
+
+.metric-add-btn {
+  background: transparent;
+  border: 1px dashed #3a7bd5;
+  border-radius: var(--radius);
+  color: #3a7bd5;
+  font-size: 1.8rem;
+  cursor: pointer;
+  padding: 10px 20px;
+  align-self: stretch;
+  transition: background 0.2s;
+}
+
+.metric-add-btn:hover {
+  background: rgba(58, 123, 213, 0.1);
 }
 
 /* Controls */
@@ -814,3 +887,19 @@ a { color: inherit; }
   .dashboard-modal-actions { flex-direction: column; align-items: stretch; }
   .dashboard-modal-actions-right { justify-content: flex-start; flex-wrap: wrap; }
 }
+
+/*stats dropdown*/
+/*.stat-dropdown {
+    background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.stat-dropdown:focus {
+  outline: none;
+}*/
+

@@ -329,7 +329,9 @@ export default function Dashboard({
   onNavigate,
   onUpdateApplication,
 }) {
+  
   const [reminders, setReminders] = useState(SEED_REMINDERS);
+  const [contacts, setContacts] = useState([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -344,13 +346,55 @@ export default function Dashboard({
   const [linkedDocuments, setLinkedDocuments] = useState(null);
   const [isLoadingDocs, setIsLoadingDocs] = useState(false);
   const viewedUrlsRef = useRef([]);
+  const [cardStats, setCardStats] = useState(["Total Application","Active Interviews","Set Reminders"]);
+  
+
+  const statOptions = useMemo(() => ({
+    "Total Applications": applications.length,
+    "Active Interviews": applications.filter(a => a.status === "Interviewing").length,
+    "Set Reminders": reminders.length,
+    "Total Contacts": contacts.length,
+    "Offers Received": applications.filter(a => a.status === "Offer").length,
+    "Rejected Applications": applications.filter(a => a.status === "Rejected").length,
+  }), [applications, reminders, contacts]);
+
+  const handleAddCard = () => {
+    if (cardStats.length >= 5) return;
+    const unused = Object.keys(statOptions).find(o => !cardStats.includes(o));
+    const updated = [...cardStats, unused || "Total Applications"];
+    setCardStats(updated);
+  };
+
+  const handleDeleteCard = (index) => {
+    if (cardStats.length <= 1) return;
+    const updated = cardStats.filter((_, i) => i !== index);
+    setCardStats(updated);
+  };
+
+  const handleCardChange = async (index, newStat) => {
+  const updated = [...cardStats];
+  updated[index] = newStat;
+  setCardStats(updated);
+  try {
+    await fetch("/api/preferences/stats", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ cardStats: updated }),
+    });
+  } catch (err) {
+    console.error("Failed to save card preferences:", err);
+  }
+};
 
   useEffect(() => {
-    if (!selectedApplication) return;
+  if (!selectedApplication) return;
 
-    const nextSelectedApplication = applications.find(
-      (application) => application.application_id === selectedApplication.application_id,
-    );
+  const nextSelectedApplication = applications.find(
+    (application) => application.application_id === selectedApplication.application_id,
+  );
 
     if (!nextSelectedApplication) {
       setSelectedApplication(null);
@@ -364,6 +408,8 @@ export default function Dashboard({
     setSelectedApplication(nextSelectedApplication);
     setDetailStatus(nextSelectedApplication.job_status);
   }, [applications, selectedApplication]);
+
+  
 
   const metrics = useMemo(() => ({
     totalApplications: applications.length,
@@ -393,8 +439,12 @@ export default function Dashboard({
       list = [...list].sort((left, right) => left.application_id - right.application_id);
     }
 
-    if (sortBy === "company") {
+    if (sortBy === "company-asc") {
       list = [...list].sort((left, right) => left.company.localeCompare(right.company));
+    }
+
+    if (sortBy === "company-desc") {
+      list = [...list].sort((left, right) => right.company.localeCompare(left.company));
     }
 
     if (sortBy === "status") {
@@ -597,21 +647,56 @@ export default function Dashboard({
       </header>
 
       <main className="dashboard" aria-label="Dashboard">
+        {/*<section className="metrics" aria-label="Key metrics">
+          {cardStats.map((selectedStat, index) => (
+            <div className="metric-card" key={index}>
+              <select
+                value={selectedStat}
+                onChange={(e) => handleCardChange(index, e.target.value)}
+                className="metric-dropdown"
+              >
+                {Object.keys(statOptions).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <div className="metric-value">{statOptions[selectedStat] ?? 0}</div>
+            </div>
+          ))}
+        </section>
+        */}
+
         <section className="metrics" aria-label="Key metrics">
-          <div className="metric-card">
-            <div className="metric-label">Total Applications</div>
-            <div className="metric-value">{metrics.totalApplications}</div>
-          </div>
-
-          <div className="metric-card">
-            <div className="metric-label">Active Interviews</div>
-            <div className="metric-value">{metrics.activeInterviews}</div>
-          </div>
-
-          <div className="metric-card">
-            <div className="metric-label">Set Reminders</div>
-            <div className="metric-value">{metrics.setReminders}</div>
-          </div>
+          {cardStats.map((selectedStat, index) => (
+            <div className="metric-card" key={index}>
+              <button
+                className="metric-delete-btn"
+                onClick={() => handleDeleteCard(index)}
+                title="Remove card"
+                style={{ visibility: cardStats.length <= 1 ? "hidden" : "visible" }}
+              >
+                ✕
+              </button>
+              <select
+                value={selectedStat}
+                onChange={(e) => handleCardChange(index, e.target.value)}
+                className="metric-dropdown"
+              >
+                {Object.keys(statOptions).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <div className="metric-value">{statOptions[selectedStat] ?? 0}</div>
+            </div>
+          ))}
+          {cardStats.length < 5 && (
+            <button className="metric-add-btn" onClick={handleAddCard}>
+              +
+            </button>
+          )}
         </section>
 
         <section className="controls" aria-label="Dashboard controls">
@@ -651,11 +736,13 @@ export default function Dashboard({
               <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort">
                 <option value="newest">Sort: Newest</option>
                 <option value="oldest">Oldest</option>
-                <option value="company">Company</option>
+                <option value="company-asc">Company (A → Z)</option>
+                <option value="company-desc">Company (Z → A)</option>
                 <option value="status">Status</option>
               </select>
             </div>
 
+            {/*
             <div className="control">
               <select value={viewMode} onChange={(event) => setViewMode(event.target.value)} aria-label="View">
                 <option value="cards">View: Cards</option>
@@ -665,6 +752,7 @@ export default function Dashboard({
               </select>
             </div>
 
+            
             <div className="quick-actions" aria-label="Quick actions">
               <button className="ghost-btn" type="button" disabled>
                 Bulk Edit
@@ -673,6 +761,7 @@ export default function Dashboard({
                 Export
               </button>
             </div>
+            */}
 
             <div className="session-actions" aria-label="Session actions">
               <button className="ghost-btn" type="button" onClick={handleResetView}>
