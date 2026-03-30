@@ -3,6 +3,7 @@ import lockedInLogo from "../assets/lockedindark.png";
 import { fetchDocumentBlob, fetchDocumentsForApplication, unlinkDocumentFromApplication } from "../lib/documentsApi";
 import { toTitleCase } from "../lib/formatting";
 import {
+  getContacts,
   getReminders,
   createReminder,
   updateReminder,
@@ -10,6 +11,45 @@ import {
 } from "../lib/api";
 
 const STATUS_OPTIONS = ["saved", "applied", "interviewing", "offer", "rejected"];
+
+const METRIC_OPTIONS = [
+  { value: "totalApplications", label: "Total Applications" },
+  { value: "activeInterviews", label: "Active Interviews" },
+  { value: "pendingReminders", label: "Pending Reminders" },
+  { value: "totalReminders", label: "Total Reminders" },
+  { value: "totalContacts", label: "Total Contacts" },
+  { value: "savedApplications", label: "Saved" },
+  { value: "appliedApplications", label: "Applied" },
+  { value: "offers", label: "Offers" },
+  { value: "rejected", label: "Rejected" },
+];
+
+function MetricCard({ metricKey, metricValue, onSelect }) {
+  const selectedLabel = METRIC_OPTIONS.find((o) => o.value === metricKey)?.label ?? metricKey;
+  return (
+    <div className="metric-card">
+      <select
+        className="metric-select"
+        value={metricKey}
+        onChange={(event) => onSelect(event.target.value)}
+        aria-label="Select metric to display"
+      >
+        {METRIC_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <div className="metric-label">
+        <span>{selectedLabel}</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </div>
+      <div className="metric-value">{metricValue}</div>
+    </div>
+  );
+}
 
 function normalize(value) {
   return String(value ?? "").toLowerCase().trim();
@@ -346,18 +386,21 @@ export default function Dashboard({
   hasLoadedApplications,
   applicationsStatus,
   onDeleteApplication,
+  onDecrementDocCount,
   onLogout,
   onNavigate,
   onUpdateApplication,
 }) {
   const [reminders, setReminders] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [metricSelections, setMetricSelections] = useState(["totalApplications", "activeInterviews", "pendingReminders"]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [viewMode, setViewMode] = useState("cards");
   const [deleteError, setDeleteError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [selectedApplication, setSelectedApplication] = useState(null);
+
   const [detailStatus, setDetailStatus] = useState("");
   const [detailError, setDetailError] = useState("");
   const [isSavingDetail, setIsSavingDetail] = useState(false);
@@ -419,6 +462,19 @@ export default function Dashboard({
   }, []);
 
   useEffect(() => {
+    async function loadContacts() {
+      try {
+        const data = await getContacts();
+        setContacts(Array.isArray(data.contacts) ? data.contacts : []);
+      } catch {
+        // non-critical, leave contacts empty
+      }
+    }
+
+    loadContacts();
+  }, []);
+
+  useEffect(() => {
     function handleClickOutside(event) {
       if (!isReminderDropdownOpen) return;
 
@@ -436,12 +492,17 @@ export default function Dashboard({
     };
   }, [isReminderDropdownOpen]);
 
-  const metrics = useMemo(() => ({
+  const allMetrics = useMemo(() => ({
     totalApplications: applications.length,
-    activeInterviews: applications.filter(
-      (application) => normalize(application.job_status) === "interviewing",
-    ).length,
-  }), [applications]);
+    activeInterviews: applications.filter((a) => normalize(a.job_status) === "interviewing").length,
+    pendingReminders: reminders.filter((r) => r.Reminder_Status === "Pending").length,
+    totalReminders: reminders.length,
+    totalContacts: contacts.length,
+    savedApplications: applications.filter((a) => normalize(a.job_status) === "saved").length,
+    appliedApplications: applications.filter((a) => normalize(a.job_status) === "applied").length,
+    offers: applications.filter((a) => normalize(a.job_status) === "offer").length,
+    rejected: applications.filter((a) => normalize(a.job_status) === "rejected").length,
+  }), [applications, reminders, contacts]);
 
   const filteredApplications = useMemo(() => {
     const q = normalize(query);
@@ -644,6 +705,7 @@ export default function Dashboard({
     try {
       await unlinkDocumentFromApplication(documentId, selectedApplication.application_id);
       setLinkedDocuments((prev) => (prev ?? []).filter((doc) => doc.id !== documentId));
+      onDecrementDocCount?.(selectedApplication.application_id);
     } catch (error) {
       setDetailError(error?.message || "Could not unlink document.");
     }
@@ -653,7 +715,6 @@ export default function Dashboard({
     setQuery("");
     setStatusFilter("all");
     setSortBy("newest");
-    setViewMode("cards");
     setDeleteError("");
   }
 
@@ -889,20 +950,21 @@ export default function Dashboard({
 
       <main className="dashboard" aria-label="Dashboard">
         <section className="metrics" aria-label="Key metrics">
-          <div className="metric-card">
-            <div className="metric-label">Total Applications</div>
-            <div className="metric-value">{metrics.totalApplications}</div>
-          </div>
-
-          <div className="metric-card">
-            <div className="metric-label">Active Interviews</div>
-            <div className="metric-value">{metrics.activeInterviews}</div>
-          </div>
-
-          <div className="metric-card">
-            <div className="metric-label">Set Reminders</div>
-            <div className="metric-value">{reminders.length}</div>
-          </div>
+          <MetricCard
+            metricKey={metricSelections[0]}
+            metricValue={allMetrics[metricSelections[0]]}
+            onSelect={(key) => setMetricSelections((prev) => [key, prev[1], prev[2]])}
+          />
+          <MetricCard
+            metricKey={metricSelections[1]}
+            metricValue={allMetrics[metricSelections[1]]}
+            onSelect={(key) => setMetricSelections((prev) => [prev[0], key, prev[2]])}
+          />
+          <MetricCard
+            metricKey={metricSelections[2]}
+            metricValue={allMetrics[metricSelections[2]]}
+            onSelect={(key) => setMetricSelections((prev) => [prev[0], prev[1], key])}
+          />
         </section>
 
         <section className="controls" aria-label="Dashboard controls">
@@ -947,24 +1009,6 @@ export default function Dashboard({
               </select>
             </div>
 
-            <div className="control">
-              <select value={viewMode} onChange={(event) => setViewMode(event.target.value)} aria-label="View">
-                <option value="cards">View: Cards</option>
-                <option value="table" disabled>
-                  Table (later)
-                </option>
-              </select>
-            </div>
-
-            <div className="quick-actions" aria-label="Quick actions">
-              <button className="ghost-btn" type="button" disabled>
-                Bulk Edit
-              </button>
-              <button className="ghost-btn" type="button" disabled>
-                Export
-              </button>
-            </div>
-
             <div className="session-actions" aria-label="Session actions">
               <button className="ghost-btn" type="button" onClick={handleResetView}>
                 Reset View
@@ -988,12 +1032,7 @@ export default function Dashboard({
               </div>
             </div>
 
-            {viewMode !== "cards" ? (
-              <div className="empty-state">
-                <div className="empty-title">Table view is coming later.</div>
-                <div className="empty-subtitle">For now, switch back to Cards.</div>
-              </div>
-            ) : isLoading ? (
+            {isLoading ? (
               <div className="empty-state">
                 <div className="empty-title">Loading applications...</div>
                 <div className="empty-subtitle">Fetching your saved jobs from the backend.</div>
@@ -1032,18 +1071,19 @@ export default function Dashboard({
               </button>
             </div>
 
-            {!reminders.length ? (
-              <div className="upcoming-reminders-empty">No reminders yet.</div>
-            ) : (
-              <ul className="upcoming-reminders-list">
-                {reminders
-                  .slice()
-                  .sort((a, b) => {
-                    const da = a.Reminder_Due_Date ? new Date(a.Reminder_Due_Date).getTime() : Infinity;
-                    const db = b.Reminder_Due_Date ? new Date(b.Reminder_Due_Date).getTime() : Infinity;
-                    return da - db;
-                  })
-                  .map((reminder) => (
+            {(() => {
+              const pending = reminders
+                .filter((r) => r.Reminder_Status === "Pending")
+                .slice()
+                .sort((a, b) => {
+                  const da = a.Reminder_Due_Date ? new Date(a.Reminder_Due_Date).getTime() : Infinity;
+                  const db = b.Reminder_Due_Date ? new Date(b.Reminder_Due_Date).getTime() : Infinity;
+                  return da - db;
+                });
+              if (!pending.length) return <div className="upcoming-reminders-empty">No pending reminders.</div>;
+              return (
+                <ul className="upcoming-reminders-list">
+                  {pending.map((reminder) => (
                     <li key={reminder.Reminder_ID} className="upcoming-reminder-item">
                       <span className="upcoming-reminder-date">
                         {formatReminderDate(reminder.Reminder_Due_Date)}
@@ -1051,8 +1091,9 @@ export default function Dashboard({
                       <span className="upcoming-reminder-title">{reminder.Reminder_Title}</span>
                     </li>
                   ))}
-              </ul>
-            )}
+                </ul>
+              );
+            })()}
           </aside>
         </section>
       </main>
@@ -1142,8 +1183,8 @@ export default function Dashboard({
 
                 <label className="reminder-field">
                   <span>Category</span>
-                  <select name="category" value={reminderForm.category} onChange={handleReminderInputChange}>
-                    <option value="">Select category</option>
+                  <select name="category" value={reminderForm.category} onChange={handleReminderInputChange} required>
+                    <option value="" disabled>Select category</option>
                     <option value="Interview">Interview</option>
                     <option value="Follow-up">Follow-up</option>
                     <option value="Reference">Reference</option>
@@ -1154,8 +1195,8 @@ export default function Dashboard({
 
                 <label className="reminder-field">
                   <span>Priority</span>
-                  <select name="priority" value={reminderForm.priority} onChange={handleReminderInputChange}>
-                    <option value="">Select priority</option>
+                  <select name="priority" value={reminderForm.priority} onChange={handleReminderInputChange} required>
+                    <option value="" disabled>Select priority</option>
                     <option value="Low">Low</option>
                     <option value="Medium">Medium</option>
                     <option value="High">High</option>
@@ -1189,7 +1230,6 @@ export default function Dashboard({
                     value={reminderForm.dueTime}
                     onChange={handleReminderInputChange}
                     type="time"
-                    required
                   />
                 </label>
               </div>

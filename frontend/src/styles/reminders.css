@@ -2,30 +2,33 @@
 
 .reminders-page {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+  align-content: start;
 }
+
+/* ── Hero ─────────────────────────────────────────── */
 
 .reminders-hero {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(17, 24, 39, 0.82), rgba(17, 24, 39, 0.62));
   box-shadow: var(--shadow-soft);
-  padding: 16px;
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 14px;
 }
 
 .reminders-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .reminders-subtitle {
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   max-width: 700px;
 }
 
@@ -33,6 +36,13 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-shrink: 0;
+}
+
+/* ── Controls ─────────────────────────────────────── */
+
+.reminders-page .controls {
+  margin-bottom: 0;
 }
 
 .reminders-controls-row {
@@ -43,50 +53,74 @@
   grid-template-columns: 220px 1fr;
 }
 
+/* ── List ─────────────────────────────────────────── */
+
 .reminders-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
+
+/* ── Compact horizontal card ──────────────────────── */
 
 .reminder-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(17, 24, 39, 0.82), rgba(17, 24, 39, 0.62));
   box-shadow: var(--shadow-soft);
-  padding: 14px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
 }
 
+/* Left: title + meta (flex: 1 fills remaining space) */
 .reminder-head {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.reminder-head > div:first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .reminder-item-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .reminder-item-meta {
-  margin: 5px 0 0;
+  margin: 2px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Badges — inline with title section */
 .reminder-badges {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .reminder-pill {
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.25px;
   text-transform: uppercase;
   font-weight: 700;
-  border-radius: 8px;
-  padding: 5px 9px;
+  border-radius: 6px;
+  padding: 3px 7px;
   border: 1px solid var(--border-strong);
   white-space: nowrap;
   background: rgba(10, 15, 26, 0.52);
@@ -134,32 +168,39 @@
   border-color: rgba(99, 102, 241, 0.34);
 }
 
+/* Middle: due date + truncated notes */
 .reminder-body {
-  margin-top: 12px;
+  flex-shrink: 0;
+  min-width: 140px;
   display: grid;
-  gap: 8px;
+  gap: 2px;
 }
 
 .reminder-due {
   color: rgba(230, 237, 247, 0.86);
-  font-size: 13px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .reminder-notes {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.45;
-  white-space: pre-wrap;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
 }
 
+/* Right: action buttons */
 .reminder-actions {
-  margin-top: 12px;
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
 }
+
+/* ── Empty state ──────────────────────────────────── */
 
 .reminders-empty {
   border: 1px dashed rgba(148, 163, 184, 0.35);
@@ -168,6 +209,8 @@
   color: var(--muted);
   background: rgba(10, 15, 26, 0.35);
 }
+
+/* ── Modal ────────────────────────────────────────── */
 
 .reminders-modal-backdrop {
   position: fixed;
@@ -241,6 +284,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   outline: none;
   font: inherit;
+  box-sizing: border-box;
 }
 
 .form-field input:focus,
@@ -270,6 +314,8 @@
   color: rgba(230, 237, 247, 0.88);
 }
 
+/* ── Responsive ───────────────────────────────────── */
+
 @media (max-width: 900px) {
   .reminders-controls-row {
     grid-template-columns: 1fr;
@@ -284,13 +330,18 @@
     align-items: flex-start;
   }
 
-  .reminder-head {
+  .reminder-card {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .reminder-badges {
-    justify-content: flex-start;
+  .reminder-body {
+    min-width: unset;
+  }
+
+  .reminder-notes {
+    max-width: unset;
+    white-space: pre-wrap;
   }
 
   .reminder-form-grid {
