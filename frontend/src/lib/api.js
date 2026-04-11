@@ -140,6 +140,8 @@ export async function deleteContact(contactId) {
     throw new Error(message);
   }
   return true;
+}
+
 export async function getNotifications() {
   const response = await authenticatedFetch('/api/notifications');
   if (!response.ok) throw new Error('Failed to load notifications.');
@@ -189,4 +191,20 @@ export async function authFetch(path, options = {}) {
     ...options,
     headers,
   });
+}
+
+export async function getDashboardPreferences() {
+  const response = await authenticatedFetch('/api/dashboard-preferences');
+  if (!response.ok) throw new Error('Failed to load dashboard preferences.');
+  return response.json();
+}
+
+export async function saveDashboardPreferences(metrics) {
+  const response = await authenticatedFetch('/api/dashboard-preferences', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metrics }),
+  });
+  if (!response.ok) throw new Error('Failed to save dashboard preferences.');
+  return response.json();
 }

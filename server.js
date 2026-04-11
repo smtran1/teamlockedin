@@ -1271,6 +1271,80 @@ app.delete('/api/documents/:documentId', authenticateToken, async (req, res) => 
   }
 });
 
+// ─── Dashboard Preferences ────────────────────────────────────────────────────
+
+app.get('/api/dashboard-preferences', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+
+  try {
+    const connection = await createConnection();
+    try {
+      const [rows] = await connection.execute(
+        'SELECT card_stat1, card_stat2, card_stat3 FROM user_preferences WHERE LOWER(email) = ?',
+        [email],
+      );
+
+      if (rows.length === 0) {
+        // No saved preferences yet — return defaults
+        return res.status(200).json({
+          metrics: ['totalApplications', 'activeInterviews', 'pendingReminders'],
+        });
+      }
+
+      const { card_stat1, card_stat2, card_stat3 } = rows[0];
+      res.status(200).json({ metrics: [card_stat1, card_stat2, card_stat3] });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error retrieving dashboard preferences.' });
+  }
+});
+
+app.post('/api/dashboard-preferences', authenticateToken, async (req, res) => {
+  const email = normalizeEmail(req.user.email);
+  const { metrics } = req.body;
+
+  if (!Array.isArray(metrics) || metrics.length !== 3) {
+    return res.status(400).json({ message: 'metrics must be an array of 3 values.' });
+  }
+
+  const VALID_METRICS = new Set([
+    'totalApplications', 'activeInterviews', 'pendingReminders',
+    'totalReminders', 'totalContacts', 'savedApplications',
+    'appliedApplications', 'offers', 'rejected',
+  ]);
+
+  if (!metrics.every((m) => VALID_METRICS.has(m))) {
+    return res.status(400).json({ message: 'One or more metric values are invalid.' });
+  }
+
+  const [stat1, stat2, stat3] = metrics;
+
+  try {
+    const connection = await createConnection();
+    try {
+      await connection.execute(
+        `INSERT INTO user_preferences (email, card_stat1, card_stat2, card_stat3)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           card_stat1 = VALUES(card_stat1),
+           card_stat2 = VALUES(card_stat2),
+           card_stat3 = VALUES(card_stat3)`,
+        [email, stat1, stat2, stat3],
+      );
+
+      res.status(200).json({ message: 'Preferences saved.' });
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error saving dashboard preferences.' });
+  }
+});
+
 // ─── Contacts ────────────────────────────────────────────────────────────────
 
 function toContactRecord(body, email) {

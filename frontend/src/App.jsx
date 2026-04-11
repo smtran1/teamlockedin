@@ -299,17 +299,6 @@ export default function App() {
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
-    <Dashboard
-      applications={applications}
-      applicationsError={applicationsError}
-      hasLoadedApplications={hasLoadedApplications}
-      applicationsStatus={applicationsStatus}
-      onDeleteApplication={handleDeleteApplication}
-      onDecrementDocCount={handleDecrementDocCount}
-      onLogout={handleLogout}
-      onNavigate={handleNavigate}
-      onUpdateApplication={handleUpdateApplication}
-    />
     <>
       <Dashboard
         applications={applications}

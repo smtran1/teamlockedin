@@ -8,6 +8,8 @@ import {
   createReminder,
   updateReminder,
   deleteReminder,
+  getDashboardPreferences,
+  saveDashboardPreferences,
 } from "../lib/api";
 
 const STATUS_OPTIONS = ["saved", "applied", "interviewing", "offer", "rejected"];
@@ -431,6 +433,7 @@ export default function Dashboard({
   const viewedUrlsRef = useRef([]);
   const bellButtonRef = useRef(null);
   const reminderDropdownRef = useRef(null);
+  const preferencesLoadedRef = useRef(false);
 
   useEffect(() => {
   if (!selectedApplication) return;
@@ -477,6 +480,39 @@ export default function Dashboard({
 
     loadContacts();
   }, []);
+
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+
+  // load effect
+   useEffect(() => {
+    async function loadMetricPreferences() {
+      try {
+        const data = await getDashboardPreferences();
+        if (Array.isArray(data.metrics) && data.metrics.length === 3) {
+          setMetricSelections(data.metrics);
+        }
+      } catch {
+        // fall back to defaults silently
+      } finally {
+        preferencesLoadedRef.current = true;
+        setPreferencesLoaded(true);
+      }
+    }
+    loadMetricPreferences();
+  }, []);
+
+  // save effect
+    useEffect(() => {
+    if (!preferencesLoadedRef.current) return;
+    async function saveMetricPreferences() {
+      try {
+        await saveDashboardPreferences(metricSelections);
+      } catch {
+        // non-critical
+      }
+    }
+    saveMetricPreferences();
+  }, [metricSelections]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -1028,46 +1064,65 @@ export default function Dashboard({
 
       <main className="dashboard" aria-label="Dashboard">
         <section className="metrics" aria-label="Key metrics">
-          <MetricCard
-            metricKey={metricSelections[0]}
-            metricValue={allMetrics[metricSelections[0]]}
-            onSelect={(key) => setMetricSelections((prev) => [key, prev[1], prev[2]])}
-          />
-          <MetricCard
-            metricKey={metricSelections[1]}
-            metricValue={allMetrics[metricSelections[1]]}
-            onSelect={(key) => setMetricSelections((prev) => [prev[0], key, prev[2]])}
-          />
-          <MetricCard
-            metricKey={metricSelections[2]}
-            metricValue={allMetrics[metricSelections[2]]}
-            onSelect={(key) => setMetricSelections((prev) => [prev[0], prev[1], key])}
-          />
-        {/*<section className="metrics" aria-label="Key metrics">
-          {cardStats.map((selectedStat, index) => (
-            <div className="metric-card" key={index}>
-              <select
-                value={selectedStat}
-                onChange={(e) => handleCardChange(index, e.target.value)}
-                className="metric-dropdown"
-              >
-                {Object.keys(statOptions).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <div className="metric-value">{statOptions[selectedStat] ?? 0}</div>
-            </div>
-          ))}
-        </section>
-        */}
+          {preferencesLoaded ? (
+            <>
+              <MetricCard
+                metricKey={metricSelections[0]}
+                metricValue={allMetrics[metricSelections[0]]}
+                onSelect={(key) => setMetricSelections((prev) => [key, prev[1], prev[2]])}
+              />
+              <MetricCard
+                metricKey={metricSelections[1]}
+                metricValue={allMetrics[metricSelections[1]]}
+                onSelect={(key) => setMetricSelections((prev) => [prev[0], key, prev[2]])}
+              />
+              <MetricCard
+                metricKey={metricSelections[2]}
+                metricValue={allMetrics[metricSelections[2]]}
+                onSelect={(key) => setMetricSelections((prev) => [prev[0], prev[1], key])}
+              />
+            </>
+          ) : (
+            <>
+              <div className="metric-card" />
+              <div className="metric-card" />
+              <div className="metric-card" />
+            </>
+          )}
 
           <div className="metric-card">
             <div className="metric-label">Set Reminders</div>
             <div className="metric-value">{reminders.length}</div>
           </div>
         </section>
+
+        {/*<main className="dashboard" aria-label="Dashboard">
+          <section className="metrics" aria-label="Key metrics">
+            {preferencesLoaded ? (
+              <>
+                <MetricCard
+                  metricKey={metricSelections[0]}
+                  metricValue={allMetrics[metricSelections[0]]}
+                  onSelect={(key) => setMetricSelections((prev) => [key, prev[1], prev[2]])}
+                />
+                <MetricCard
+                  metricKey={metricSelections[1]}
+                  metricValue={allMetrics[metricSelections[1]]}
+                  onSelect={(key) => setMetricSelections((prev) => [prev[0], key, prev[2]])}
+                />
+                <MetricCard
+                  metricKey={metricSelections[2]}
+                  metricValue={allMetrics[metricSelections[2]]}
+                  onSelect={(key) => setMetricSelections((prev) => [prev[0], prev[1], key])}
+                />
+              </>
+            ) : null}
+
+            <div className="metric-card">
+              <div className="metric-label">Set Reminders</div>
+              <div className="metric-value">{reminders.length}</div>
+            </div>
+          </section>*/}
 
         <section className="controls" aria-label="Dashboard controls">
           <div className="controls-row">
